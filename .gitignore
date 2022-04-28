@@ -1,0 +1,5 @@
+__pycache__
+conda_env
+*.pyc
+.vscode
+.DS_Store
