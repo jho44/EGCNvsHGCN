@@ -137,8 +137,9 @@ def load_data_lp(dataset, use_feats, data_path):
         adj, features = load_synthetic_data(dataset, use_feats, data_path)[:2]
     elif dataset == 'airport':
         adj, features = load_data_airport(dataset, data_path, return_label=False)
-    elif dataset == 'twitter':
-        adj, features = load_twitter_data(data_path)[:2]
+    elif dataset.split('_')[0] == 'twitter':
+    	adj, features = load_twitter_data(data_path)[:2]
+        #adj, features = load_twitter_dataV2(dataset, data_path)[:2] #if you want to use Brian's code
     else:
         raise FileNotFoundError('Dataset {} is not supported.'.format(dataset))
     data = {'adj_train': adj, 'features': features}
@@ -160,8 +161,9 @@ def load_data_nc(dataset, use_feats, data_path, split_seed):
         elif dataset == 'airport': # 3188
             adj, features, labels = load_data_airport(dataset, data_path, return_label=True)
             val_prop, test_prop = 0.15, 0.15
-        elif dataset == 'twitter': # 583
+        elif dataset.split('_')[0] == 'twitter': # 583
             adj, features, labels = load_twitter_data(data_path)
+            #adj, features, labels = load_twitter_dataV2(dataset, data_path) #if you want to use Brian's code
             val_prop, test_prop = 0.25, 0.50
         else:
             raise FileNotFoundError('Dataset {} is not supported.'.format(dataset))
@@ -280,6 +282,44 @@ def load_twitter_data(data_path):
 
     features, labels = sp.eye(data.shape[0]), data[:, 1]
     return sp.csr_matrix(adj), features, labels
+ 
+#for dataset use twitter_$type of edge$, so for example twitter_friend, twitter_mention
+#type of edge is based on names of the data files    
+def load_twitter_dataV2(dataset, data_path):
+    #resolve the data_path cause of my weird code
+    data_path, _ = os.path.split(data_path)
+    data_path = os.path.join(data_path, dataset.split('_')[0]) #this will fix the last directory to /twitter/
+
+    dict_df = pd.read_csv(os.path.join(data_path, "dict.csv"), sep='\t', float_precision="round_trip",  dtype={"twitter_id":'str'})
+    nodes = np.array(dict_df.index.values)
+
+    edge_type = dataset.split('_')[1] #favorite, friend, mention, reply, or retweets
+    edge_df= pd.read_csv(os.path.join(data_path, "{}_list.csv".format(edge_type)), sep='\t', dtype='str')#{"follower":'str', "followee":'str'})
+    
+    #create dictionaries, node ids are assigned as they are encountered in dict_df, so the first entry would have node id 0
+    nid_to_tid = dict_df["twitter_id"].to_dict() #dict that converts from node id to twitter id
+    tid_to_nid = {v: k for k, v in nid_to_tid.items()} #dict that converts from twitter id to node id
+
+    #map twitter ids from original data to their node id
+    #actor is the one doing the action, following, favoriting, liking, etc
+    #recipient is the one receiving the action, so they get a new follower or someone likes their tweet, etc
+    actor_map = edge_df.iloc[:,0].map(tid_to_nid)
+    recipient_map = edge_df.iloc[:,1].map(tid_to_nid)
+
+    #create edges np array for shape (#num edges x 2) where each row represents an edge
+    edges =np.vstack((actor_map.to_numpy(), recipient_map.to_numpy())).T
+
+    adj = np.zeros((nodes.shape[0], nodes.shape[0]))
+    for edge in range(edges.shape[0]):
+      actor = edges[edge, 0]
+      recipient = edges[edge, 1]
+      adj[actor, recipient] = 1
+
+    #dict_df.drop(dict_df[dict_df['party'] == 'I'].index, inplace=True)
+    dict_df.replace({'party': {'D': 0, 'I': 0, 'R': 1}}, inplace=True)
+    features, labels = sp.eye(dict_df.shape[0]), dict_df['party'].values
+    return sp.csr_matrix(adj), features, labels
+
 
 def load_data_airport(dataset_str, data_path, return_label=False):
     graph = pkl.load(open(os.path.join(data_path, dataset_str + '.p'), 'rb'))
