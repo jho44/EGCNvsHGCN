@@ -138,7 +138,7 @@ def load_data_lp(dataset, use_feats, data_path):
     elif dataset == 'airport':
         adj, features = load_data_airport(dataset, data_path, return_label=False)
     elif dataset.split('_')[0] == 'twitter':
-    	adj, features = load_twitter_data(data_path)[:2]
+    	adj, features = load_twitter_data(data_path, use_feats)[:2]
         #adj, features = load_twitter_dataV2(dataset, data_path)[:2] #if you want to use Brian's code
     else:
         raise FileNotFoundError('Dataset {} is not supported.'.format(dataset))
@@ -162,9 +162,12 @@ def load_data_nc(dataset, use_feats, data_path, split_seed):
             adj, features, labels = load_data_airport(dataset, data_path, return_label=True)
             val_prop, test_prop = 0.15, 0.15
         elif dataset.split('_')[0] == 'twitter': # 583
-            adj, features, labels = load_twitter_data(data_path)
+            adj, features, labels = load_twitter_data(data_path, use_feats)
             #adj, features, labels = load_twitter_dataV2(dataset, data_path) #if you want to use Brian's code
             val_prop, test_prop = 0.25, 0.50
+        elif dataset == 'lym':
+            adj, features, labels = load_lym_data(data_path)
+            val_prop, test_prop = 0.25, 0.25
         else:
             raise FileNotFoundError('Dataset {} is not supported.'.format(dataset))
         idx_val, idx_test, idx_train = split_data(labels, val_prop, test_prop, seed=split_seed)
@@ -244,10 +247,12 @@ def load_synthetic_data(dataset_str, use_feats, data_path):
         features = sp.load_npz(os.path.join(data_path, "{}.feats.npz".format(dataset_str)))
     else:
         features = sp.eye(adj.shape[0])
+
+    print(features.shape)
     labels = np.load(os.path.join(data_path, "{}.labels.npy".format(dataset_str)))
     return sp.csr_matrix(adj), features, labels
 
-def load_twitter_data(data_path):
+def load_twitter_data(data_path, use_feats):
     names = ['favorite_list', 'friend_list', 'mention_list', 'reply_list', 'retweet_list']
     object_to_idx = {}
     idx_counter = 0
@@ -280,11 +285,22 @@ def load_twitter_data(data_path):
     data.replace({'party': {'D': 0, 'R': 1}}, inplace=True)
     data = data[['twitter_id', 'party']].values
 
-    features, labels = sp.eye(data.shape[0]), data[:, 1]
+    labels = data[:, 1]
+    if use_feats == 1:
+        user_features = np.load(os.path.join(data_path, 'features.npz'))
+        features = np.concatenate(
+            (user_features['description'], user_features['status']),
+            axis=1)
+    elif use_feats == 2:
+        features = np.load(os.path.join(data_path, 'features.npz'))['description']
+    elif use_feats == 3:
+        features = np.load(os.path.join(data_path, 'features.npz'))['status']
+    else:
+        features = sp.eye(data.shape[0])
     return sp.csr_matrix(adj), features, labels
- 
+
 #for dataset use twitter_$type of edge$, so for example twitter_friend, twitter_mention
-#type of edge is based on names of the data files    
+#type of edge is based on names of the data files
 def load_twitter_dataV2(dataset, data_path):
     #resolve the data_path cause of my weird code
     data_path, _ = os.path.split(data_path)
@@ -295,7 +311,7 @@ def load_twitter_dataV2(dataset, data_path):
 
     edge_type = dataset.split('_')[1] #favorite, friend, mention, reply, or retweets
     edge_df= pd.read_csv(os.path.join(data_path, "{}_list.csv".format(edge_type)), sep='\t', dtype='str')#{"follower":'str', "followee":'str'})
-    
+
     #create dictionaries, node ids are assigned as they are encountered in dict_df, so the first entry would have node id 0
     nid_to_tid = dict_df["twitter_id"].to_dict() #dict that converts from node id to twitter id
     tid_to_nid = {v: k for k, v in nid_to_tid.items()} #dict that converts from twitter id to node id
