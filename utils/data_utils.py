@@ -34,16 +34,16 @@ def load_data(args, datapath):
 # ############### FEATURES PROCESSING ####################################
 
 
-def process(adj, features, normalize_adj, normalize_feats):
+def process(adjs, features, normalize_adj, normalize_feats):
     if sp.isspmatrix(features):
         features = np.array(features.todense())
     if normalize_feats:
         features = normalize(features)
     features = torch.Tensor(features)
     if normalize_adj:
-        adj = normalize(adj + sp.eye(adj.shape[0]))
-    adj = sparse_mx_to_torch_sparse_tensor(adj)
-    return adj, features
+        adjs = [normalize(adj + sp.eye(adj.shape[0])) for adj in adjs]
+    adjs = [sparse_mx_to_torch_sparse_tensor(adj) for adj in adjs]
+    return adjs, features
 
 
 def normalize(mx):
@@ -246,40 +246,40 @@ def load_synthetic_data(dataset_str, use_feats, data_path):
     return sp.csr_matrix(adj), features, labels
 
 def load_twitter_data(data_path):
-    names = ['favorite_list', 'friend_list', 'mention_list', 'reply_list', 'retweet_list']
-    object_to_idx = {}
-    idx_counter = 0
-    edges = []
-    for name in names:
-        with open(os.path.join(data_path, "{}.csv".format(name)), 'r') as f:
-            all_edges = f.readlines()
-        all_edges = all_edges[1:]
-        for line in all_edges:
-            n1, n2, _ = line.rstrip().split('\t')
-            if n1 in object_to_idx:
-                i = object_to_idx[n1]
-            else:
-                i = idx_counter
-                object_to_idx[n1] = i
-                idx_counter += 1
-            if n2 in object_to_idx:
-                j = object_to_idx[n2]
-            else:
-                j = idx_counter
-                object_to_idx[n2] = j
-                idx_counter += 1
-            edges.append((i, j))
-    adj = np.zeros((len(object_to_idx), len(object_to_idx)))
-    for i, j in edges:
-        adj[i, j] = 1.  # comment this line for directed adjacency matrix
-        adj[j, i] = 1.
+    # load all user information
     data = pd.read_csv(os.path.join(data_path, "dict.csv"), sep='\t')
     data.drop(data[data['party'] == 'I'].index, inplace=True)
     data.replace({'party': {'D': 0, 'R': 1}}, inplace=True)
+    data_im = data.copy()
     data = data[['twitter_id', 'party']].values
 
+    # create dict that maps user id to index
+    ids = data_im['twitter_id'].values
+    id_to_idx = dict([(ids[i], i) for i in range(len(ids))])
+    adjs = []
+
+    # loop through all data set
+    names = ['favorite_list', 'friend_list', 'mention_list', 'reply_list', 'retweet_list']
+    for name in names:
+        with open(os.path.join(data_path, "{}.csv".format(name)), 'r') as f:
+            all_edges = f.readlines()
+        # Create adj for each dataset
+        edges = []
+        all_edges = all_edges[1:]
+        for line in all_edges:
+            n1, n2, _ = line.rstrip().split('\t')
+            if n1 in ids and n2 in ids:
+                idx1 = id_to_idx[n1]
+                idx2 = id_to_idx[n2]
+                edges.append((idx1, idx2))
+        adj = np.zeros((len(ids), len(ids)))
+        for i, j in edges:
+            adj[j, i] = 1.
+        # append adj for each dataset to adjs
+        adjs.append(adj)
+
     features, labels = sp.eye(data.shape[0]), data[:, 1]
-    return sp.csr_matrix(adj), features, labels
+    return [sp.csr_matrix(adj) for adj in adjs], features, labels
 
 def load_data_airport(dataset_str, data_path, return_label=False):
     graph = pkl.load(open(os.path.join(data_path, dataset_str + '.p'), 'rb'))

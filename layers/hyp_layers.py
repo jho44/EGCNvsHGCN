@@ -123,6 +123,8 @@ class HypAgg(Module):
         super(HypAgg, self).__init__()
         self.manifold = manifold
         self.c = c
+        # self.adj_weights = nn.Parameter(torch.Tensor(5, 583, 583))
+        self.adj_weights = nn.Parameter(torch.Tensor(5))
 
         self.in_features = in_features
         self.dropout = dropout
@@ -130,9 +132,20 @@ class HypAgg(Module):
         self.use_att = use_att
         if self.use_att:
             self.att = DenseAtt(in_features, dropout)
+        self.reset_parameters()
 
-    def forward(self, x, adj):
+    def reset_parameters(self):
+        init.normal_(self.adj_weights)
+
+    def forward(self, x, adjs):
         x_tangent = self.manifold.logmap0(x, c=self.c)
+        weights = self.adj_weights.data
+        adj = torch.mul(torch.tensor(adjs[0]), weights[0])
+        # adjs = [torch.tensor(adj) for adj in adjs]
+        # adj = torch.stack(adjs, 0)
+        for i in range(1, len(adjs)):
+            adj = torch.add(adj, torch.mul(torch.tensor(adjs[i]), weights[i]))
+        # adj = torch.sum(torch.bmm(adj, self.adj_weights), 0)
         if self.use_att:
             if self.local_agg:
                 x_local_tangent = []
@@ -140,7 +153,6 @@ class HypAgg(Module):
                     x_local_tangent.append(self.manifold.logmap(x[i], x, c=self.c))
                 x_local_tangent = torch.stack(x_local_tangent, dim=0)
                 adj_att = self.att(x_tangent, adj)
-                att_rep = adj_att.unsqueeze(-1) * x_local_tangent
                 support_t = torch.sum(adj_att.unsqueeze(-1) * x_local_tangent, dim=1)
                 output = self.manifold.proj(self.manifold.expmap(x, support_t, c=self.c), c=self.c)
                 return output
