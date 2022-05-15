@@ -253,8 +253,20 @@ def load_synthetic_data(dataset_str, use_feats, data_path):
     return sp.csr_matrix(adj), features, labels
 
 def load_twitter_data(data_path, use_feats):
+    
+    with open(os.path.join(data_path, "all_twitter_ids.csv"), 'r') as f:
+            all_twitter_ids = f.readlines()
+    all_twitter_ids = all_twitter_ids[1:]
+    all_twitter_ids = [x.rstrip('\n') for x in all_twitter_ids]
+    all_twitter_ids = np.array(all_twitter_ids)
+    
+    idx_to_object = dict(enumerate(all_twitter_ids.flatten()))
+    object_to_idx= {v: k for k, v in idx_to_object.items()}   
+    
+    adj = np.zeros((all_twitter_ids.shape[0], all_twitter_ids.shape[0]))
+    
     names = ['favorite_list', 'friend_list', 'mention_list', 'reply_list', 'retweet_list']
-    object_to_idx = {}
+    #names = ['friend_list']
     idx_counter = 0
     edges = []
     for name in names:
@@ -263,29 +275,28 @@ def load_twitter_data(data_path, use_feats):
         all_edges = all_edges[1:]
         for line in all_edges:
             n1, n2, _ = line.rstrip().split('\t')
-            if n1 in object_to_idx:
-                i = object_to_idx[n1]
-            else:
-                i = idx_counter
-                object_to_idx[n1] = i
-                idx_counter += 1
-            if n2 in object_to_idx:
-                j = object_to_idx[n2]
-            else:
-                j = idx_counter
-                object_to_idx[n2] = j
-                idx_counter += 1
-            edges.append((i, j))
-    adj = np.zeros((len(object_to_idx), len(object_to_idx)))
+            i = object_to_idx[n1]
+            j = object_to_idx[n2]
+            edges.append((i, j))            
+    
+    print(adj.shape)
     for i, j in edges:
-        adj[i, j] = 1.  # comment this line for directed adjacency matrix
-        adj[j, i] = 1.
-    data = pd.read_csv(os.path.join(data_path, "dict.csv"), sep='\t')
-    data.drop(data[data['party'] == 'I'].index, inplace=True)
-    data.replace({'party': {'D': 0, 'R': 1}}, inplace=True)
-    data = data[['twitter_id', 'party']].values
-
-    labels = data[:, 1]
+        adj[i, j] = 1.  
+        #adj[j, i] = 1. # comment this line for directed adjacency matrix
+        
+    data = pd.read_csv(os.path.join(data_path, "dict.csv"), sep='\t', dtype={"twitter_id":'str'})
+    #data.drop(data[data['party'] == 'I'].index, inplace=True)
+    data.replace({'party': {'D': 0, 'I': 0, 'R': 1}}, inplace=True)
+    data = data[['twitter_id', 'party']]#.values
+    
+    labels = np.asarray([])
+    for key in object_to_idx:
+    	labels = np.concatenate((labels, data[data['twitter_id']==key]['party'].to_numpy()))
+    	#labels.append(data[data['twitter_id']==key]['party'].value)
+    
+    #labels = data[:, 1]
+        
+    
     if use_feats == 1:
         user_features = np.load(os.path.join(data_path, 'features.npz'))
         features = np.concatenate(
@@ -296,8 +307,8 @@ def load_twitter_data(data_path, use_feats):
     elif use_feats == 3:
         features = np.load(os.path.join(data_path, 'features.npz'))['status']
     else:
-        features = sp.eye(data.shape[0])
-    return sp.csr_matrix(adj), features, labels
+        features = sp.eye(adj.shape[0])
+    return sp.csr_matrix(adj), features, labels 
 
 #for dataset use twitter_$type of edge$, so for example twitter_friend, twitter_mention
 #type of edge is based on names of the data files
