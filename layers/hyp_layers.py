@@ -69,7 +69,10 @@ class HyperbolicGraphConvolution(nn.Module):
     def forward(self, input):
         x, adj = input
         h = self.linear.forward(x)
-        h = self.agg.forward(h, adj)
+        h = self.agg.forward(h, adj) # want neighbors from diff relations to be aggregated properly
+        '''
+        apply aggregation on diff relations w/ diff learnable weights -- simple avg
+        '''
         h = self.hyp_act.forward(h)
         output = h, adj
         return output
