@@ -139,12 +139,12 @@ class HypAgg(Module):
 
     def forward(self, x, adjs):
         x_tangent = self.manifold.logmap0(x, c=self.c)
-        weights = self.adj_weights.data
-        adj = torch.mul(torch.tensor(adjs[0]), weights[0])
+        weights = self.adj_weights.clone()
+        adj = torch.mul(adjs[0].to_dense().clone().detach(), weights[0])
         # adjs = [torch.tensor(adj) for adj in adjs]
         # adj = torch.stack(adjs, 0)
         for i in range(1, len(adjs)):
-            adj = torch.add(adj, torch.mul(torch.tensor(adjs[i]), weights[i]))
+            adj = torch.add(adj, torch.mul(adjs[i].to_dense().clone().detach(), weights[i]))
         # adj = torch.sum(torch.bmm(adj, self.adj_weights), 0)
         if self.use_att:
             if self.local_agg:
