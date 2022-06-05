@@ -32,6 +32,9 @@ Basically follow the instructions in the original hgcn repo's README (copied bel
 
   The node classification tasks achieved around 50% accuracy, which is expected since the node features are just an identity matrix. The link prediction tasks seem to yield far better results.
 
+### Distance Calculations (dist_calcs.py)
+If wanting to calculate the distance between nodes within various embedding spaces, be sure to change the file names as they are referring to where on your local machine the github repo is as well as the local files of where the logs are and the date for which you ran the train.py file.
+
 ------------------------------------------------------------
 *The original hgcn repo's README*
 
